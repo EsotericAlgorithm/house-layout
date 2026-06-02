@@ -16,6 +16,14 @@ Usage:
   --ty     Y shift in Z-up world metres (Z-up Y = horizontal depth = -(Three.js Z))
   --tz     Z shift in Z-up world metres = height change (= Three.js Y nudge)
 
+Full 3-axis form (preferred — emitted by the viewer "Get Command" button):
+  uv run pipeline/07d_apply_floor_align.py --floor <floor> --matrix "m00 m01 ... m33"
+
+  --matrix  16 floats, row-major: the raw Three.js Y-up correction matrix from
+            the viewer. It is converted to Z-up world space via conjugation by
+            ZUP_TO_YUP, then pre-multiplied onto global_T[floor]. Handles any
+            rotation/translation (including the in-place pivot) exactly.
+
 The correction is pre-multiplied onto global_T[floor] in Z-up space.
 The viewer "Get Command" button outputs the correct flags automatically.
 """
@@ -31,6 +39,14 @@ from config import OUT
 
 VALID_FLOORS = ["basement", "main_floor", "top_floor", "attic"]
 
+# Three.js Y-up -> Z-up world (must match 07_export_viewer.py)
+ZUP_TO_YUP = np.array([
+    [1, 0,  0, 0],
+    [0, 0,  1, 0],
+    [0,-1,  0, 0],
+    [0, 0,  0, 1],
+], dtype=np.float64)
+
 def make_correction(theta_deg, tx, ty, tz):
     theta = np.deg2rad(theta_deg)
     c, s  = np.cos(theta), np.sin(theta)
@@ -42,17 +58,39 @@ def make_correction(theta_deg, tx, ty, tz):
         [0,  0, 0,  1],
     ], dtype=np.float64)
 
+def correction_from_yup_matrix(m16):
+    """Convert a raw Three.js Y-up correction matrix to its Z-up equivalent.
+
+    The viewer node transform is  M_view = ZUP_TO_YUP @ global_T @ (...).
+    Applying M_corr_yup on the left of M_view is equivalent to applying
+    M_corr_zup = ZUP_TO_YUP^-1 @ M_corr_yup @ ZUP_TO_YUP on the left of global_T.
+    """
+    M_yup = np.array(m16, dtype=np.float64).reshape(4, 4)
+    return np.linalg.inv(ZUP_TO_YUP) @ M_yup @ ZUP_TO_YUP
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--floor", default="top_floor",
                     choices=VALID_FLOORS, help="which floor to adjust")
-    ap.add_argument("--theta", type=float, required=True, help="rotation in degrees")
+    ap.add_argument("--theta", type=float, default=None, help="rotation in degrees (scalar form)")
     ap.add_argument("--tx",    type=float, default=0.0,   help="X shift (metres)")
     ap.add_argument("--ty",    type=float, default=0.0,   help="Z-up Y shift (metres, horizontal depth)")
     ap.add_argument("--tz",    type=float, default=0.0,   help="Z-up Z shift (metres, height)")
+    ap.add_argument("--matrix", type=str, default=None, metavar="\"m m ... m\"",
+                    help="raw 4x4 Y-up correction matrix, row-major: a single "
+                         "quoted string of 16 whitespace-separated floats")
     args = ap.parse_args()
 
-    M_corr = make_correction(args.theta, args.tx, args.ty, args.tz)
+    if args.matrix is None and args.theta is None:
+        ap.error("provide either --matrix (16 floats) or --theta")
+
+    if args.matrix is not None:
+        matrix = [float(x) for x in args.matrix.split()]
+        if len(matrix) != 16:
+            ap.error(f"--matrix needs 16 floats, got {len(matrix)}")
+        M_corr = correction_from_yup_matrix(matrix)
+    else:
+        M_corr = make_correction(args.theta, args.tx, args.ty, args.tz)
 
     cache = OUT / "FINAL_transforms.pkl"
     with open(cache, "rb") as f:
@@ -63,7 +101,10 @@ def main():
     data["global_T"][args.floor] = new_T
 
     print(f"Applying to {args.floor}:")
-    print(f"  theta={args.theta:.4f} deg  tx={args.tx:.4f}m  ty={args.ty:.4f}m  tz={args.tz:.4f}m")
+    if args.matrix is not None:
+        print("  matrix form (3-axis correction from viewer)")
+    else:
+        print(f"  theta={args.theta:.4f} deg  tx={args.tx:.4f}m  ty={args.ty:.4f}m  tz={args.tz:.4f}m")
     print(f"  Old: X={old_T[0,3]:.3f}  Y={old_T[1,3]:.3f}  Z={old_T[2,3]:.3f}")
     print(f"  New: X={new_T[0,3]:.3f}  Y={new_T[1,3]:.3f}  Z={new_T[2,3]:.3f}")
 

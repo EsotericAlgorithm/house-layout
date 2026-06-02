@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>2505 NE 42nd Ave</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -71,20 +72,23 @@
     background:#111; padding:6px; border-radius:4px; display:none;
   }
 
-  /* ── Align panel ── */
-  #align-panel {
+  /* ── Notes panel ── */
+  #notes-panel {
     position:fixed; bottom:16px; right:16px;
-    background:rgba(10,10,30,0.92); border:1px solid #335;
-    border-radius:8px; padding:12px 16px; font-size:13px; min-width:260px;
-    display: none;
+    background:rgba(10,10,30,0.92); border:1px solid #5a4a2a;
+    border-radius:8px; padding:12px 16px; font-size:13px;
+    min-width:260px; max-width:300px; display:none;
   }
-  #align-panel h3 { color:#c9b1ff; margin-bottom:8px; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; }
-  #align-instructions { color:#888; font-size:11px; line-height:1.6; margin-bottom:8px; }
-  #align-counts { font-size:12px; margin-bottom:8px; }
-  #align-counts .green { color:#5fda8a; }
-  #align-counts .purple { color:#b88dff; }
-  #align-result { margin-top:8px; font-size:12px; line-height:1.8; color:#e8b86d; font-weight:bold; }
-  #align-residual { color:#888; font-size:11px; }
+  #notes-panel h3 { color:#e8b86d; margin-bottom:8px; font-size:11px; text-transform:uppercase; letter-spacing:1.5px; }
+  #note-list { max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:3px; }
+  .note-item { display:flex; align-items:center; justify-content:space-between; gap:6px;
+    background:#15152e; border:1px solid #2a2a44; border-radius:4px; padding:4px 6px; font-size:12px; }
+  .note-item.sel { border-color:#e8b86d; }
+  .note-go { cursor:pointer; color:#ddd; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .note-del { margin:0; padding:1px 7px; font-size:11px; color:#f99; border-color:#633; }
+  #note-edit-text { width:100%; margin-top:8px; background:#111; color:#eee;
+    border:1px solid #555; border-radius:4px; padding:6px; font-size:12px;
+    font-family:inherit; resize:vertical; }
 
   button {
     margin-top:6px; padding:5px 12px; border:1px solid #555;
@@ -105,6 +109,40 @@
   #progress { width:320px; height:5px; background:#222; border-radius:3px; }
   #progress-bar { height:100%; background:#7ec8e3; border-radius:3px; width:0%; transition:width 0.25s; }
   #load-status { color:#666; font-size:12px; }
+
+  /* ── Touch fly controls (mobile only) ── */
+  #touch-controls { display:none; }
+  body.touch #touch-controls { display:block; }
+  .touch-btn {
+    position:fixed; width:56px; height:56px; border-radius:50%;
+    background:rgba(20,20,45,0.55); border:1px solid #5a5a78; color:#cfe3f0;
+    font-size:22px; line-height:1; display:flex; align-items:center; justify-content:center;
+    user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+    touch-action:none; z-index:60; backdrop-filter:blur(2px);
+  }
+  .touch-btn.on { background:rgba(70,110,165,0.9); border-color:#7ec8e3; }
+  /* movement pad — bottom-left */
+  #tc-fwd   { left:80px;  bottom:154px; }
+  #tc-back  { left:80px;  bottom:40px;  }
+  #tc-left  { left:18px;  bottom:97px;  }
+  #tc-right { left:142px; bottom:97px;  }
+  /* vertical + sprint — bottom-right */
+  #tc-up     { right:26px; bottom:154px; }
+  #tc-down   { right:26px; bottom:40px;  }
+  #tc-sprint { right:92px; bottom:97px; width:60px; height:60px; font-size:11px; font-weight:700; letter-spacing:0.5px; }
+
+  /* ── Responsive layout (phones / small screens) ── */
+  @media (max-width: 768px) {
+    #hud { font-size:11px; min-width:0; max-width:48vw; padding:8px 10px; line-height:1.55; }
+    body.touch #hint { display:none; }
+    #toolbar { flex-wrap:wrap; max-width:50vw; justify-content:flex-end; gap:6px; }
+    #toolbar button { font-size:11px; padding:7px 10px; }
+    #measure-panel { min-width:0; max-width:62vw; font-size:11px; padding:8px 10px;
+                     bottom:auto; top:84px; left:12px; }
+    #nudge-panel, #notes-panel { min-width:0; width:78vw; max-width:300px;
+                     max-height:62vh; overflow-y:auto; font-size:12px;
+                     bottom:12px; right:12px; }
+  }
 </style>
 </head>
 <body>
@@ -119,6 +157,16 @@
 <div id="crosshair"></div>
 <div id="marker-flash"></div>
 
+<div id="touch-controls">
+  <div id="tc-fwd"    class="touch-btn" data-move="KeyW">▲</div>
+  <div id="tc-back"   class="touch-btn" data-move="KeyS">▼</div>
+  <div id="tc-left"   class="touch-btn" data-move="KeyA">◀</div>
+  <div id="tc-right"  class="touch-btn" data-move="KeyD">▶</div>
+  <div id="tc-up"     class="touch-btn" data-vert="up">⤒</div>
+  <div id="tc-down"   class="touch-btn" data-vert="down">⤓</div>
+  <div id="tc-sprint" class="touch-btn">RUN</div>
+</div>
+
 <div id="hud">
   <b>2505 NE 42nd Ave</b><br>
   <span id="floor-label"></span>
@@ -126,9 +174,7 @@
     WASD — fly &nbsp;|&nbsp; Shift — sprint<br>
     Click — lock mouse &nbsp;|&nbsp; Esc — unlock<br>
     N — nudge floor &nbsp;|&nbsp; C — clip floor &nbsp;|&nbsp; M — measure<br>
-    <span style="color:#5fda8a">G</span> — ref marker &nbsp;
-    <span style="color:#b88dff">P</span> — 2F marker &nbsp;
-    Bksp — undo
+    <span style="color:#e8b86d">B</span> — pin note where you're looking
   </div>
 </div>
 
@@ -136,7 +182,7 @@
   <button id="btn-mesh"  onclick="setView('mesh')"  class="active">Textured</button>
   <button id="btn-cloud" onclick="setView('cloud')">Point Cloud</button>
   <button onclick="toggleNudgePanel()" id="btn-nudge">Nudge Floor</button>
-  <button onclick="toggleAlignPanel()" id="btn-align">Align 2F</button>
+  <button onclick="toggleNotesPanel()" id="btn-notes">Notes</button>
   <button onclick="toggleClip()" id="btn-clip">Clip</button>
 </div>
 
@@ -157,8 +203,22 @@
     <option value="main_to_basement">Stair (main→basement)</option>
   </select>
   <div class="nudge-row">
-    <label>Rotate <span id="nv-theta">0.0 deg</span></label>
+    <label>Pitch — rot X <span id="nv-rotx">0.0 deg</span></label>
+    <input type="range" id="ns-rotx" min="-180" max="180" step="0.5" value="0" oninput="applyNudge()">
+  </div>
+  <div class="nudge-row">
+    <label>Yaw — rot Y <span id="nv-theta">0.0 deg</span></label>
     <input type="range" id="ns-theta" min="-180" max="180" step="0.5" value="0" oninput="applyNudge()">
+  </div>
+  <div class="nudge-row">
+    <label>Roll — rot Z <span id="nv-rotz">0.0 deg</span></label>
+    <input type="range" id="ns-rotz" min="-180" max="180" step="0.5" value="0" oninput="applyNudge()">
+  </div>
+  <div class="nudge-row" style="display:flex;gap:6px;margin-bottom:8px">
+    <button onclick="bumpRot('ns-rotx',-90)" style="flex:1;margin:0;padding:3px 0">X −90°</button>
+    <button onclick="bumpRot('ns-rotx',90)"  style="flex:1;margin:0;padding:3px 0">X +90°</button>
+    <button onclick="bumpRot('ns-rotz',-90)" style="flex:1;margin:0;padding:3px 0">Z −90°</button>
+    <button onclick="bumpRot('ns-rotz',90)"  style="flex:1;margin:0;padding:3px 0">Z +90°</button>
   </div>
   <div class="nudge-row">
     <label>Move X <span id="nv-tx">0.000 m</span></label>
@@ -184,30 +244,21 @@
   <div id="nudge-cmd"></div>
 </div>
 
-<div id="align-panel">
-  <h3>2F Alignment</h3>
-  <div id="align-instructions">
-    Aim crosshair, press:<br>
-    <span style="color:#5fda8a">G</span> — place reference pt (main floor)<br>
-    <span style="color:#b88dff">P</span> — place 2F pt (same physical spot)<br>
-    <span style="color:#888">Backspace</span> — remove last
+<div id="notes-panel">
+  <h3>Notes</h3>
+  <div class="btn-row" style="margin-bottom:8px">
+    <button onclick="addNoteHere()">+ Pin note (B)</button>
   </div>
-  <div id="align-counts">
-    Ref <span class="green" id="ref-count">0</span> pts &nbsp;|&nbsp;
-    2F <span class="purple" id="tgt-count">0</span> pts
+  <div id="note-list"></div>
+  <div id="note-editor" style="display:none">
+    <textarea id="note-edit-text" rows="3" placeholder="Type note…"></textarea>
+    <div class="btn-row">
+      <button onclick="saveNoteEdit()">Save</button>
+      <button onclick="deleteNote()">Delete</button>
+      <button onclick="document.getElementById('note-editor').style.display='none'">Close</button>
+    </div>
   </div>
-  <div id="align-list" style="font-size:10px;color:#888;margin-top:4px;max-height:80px;overflow-y:auto;line-height:1.5;"></div>
-  <div class="btn-row">
-    <button onclick="solveAlignment()" id="solve-btn" disabled>Solve &amp; Preview</button>
-    <button onclick="clearAlignment()">Clear</button>
-  </div>
-  <div id="align-result"></div>
-  <div id="align-residual"></div>
-  <div class="btn-row" id="apply-row" style="display:none">
-    <button onclick="applyAlignment()">Apply to 2F</button>
-    <button onclick="showPipelineCmd()">Bake to pipeline</button>
-  </div>
-  <pre id="pipeline-cmd" style="display:none;font-size:10px;color:#aaa;margin-top:8px;white-space:pre-wrap;"></pre>
+  <div id="notes-status" style="color:#777;font-size:10px;margin-top:8px"></div>
 </div>
 
 <script type="importmap">
@@ -249,17 +300,24 @@ scene.add(sun);
 // ── Controls ──────────────────────────────────────────────────────────────────
 const controls  = new PointerLockControls(camera, renderer.domElement);
 const crosshair = document.getElementById('crosshair');
-canvas.addEventListener('click', () => { if (!measureMode) controls.lock(); });
+canvas.addEventListener('click', () => { if (!measureMode && !IS_TOUCH) controls.lock(); });
 controls.addEventListener('lock',   () => { crosshair.style.display = 'block'; });
 controls.addEventListener('unlock', () => { crosshair.style.display = 'none';  });
+
+// Touch: PointerLock/WASD don't work on a touchscreen, so we provide on-screen
+// fly controls + drag-to-look. Desktop is unaffected.
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (IS_TOUCH) document.body.classList.add('touch');
+let touchSprint = false;
+let touchVert   = 0;   // -1 down, +1 up
 
 const keys = {};
 document.addEventListener('keydown', onKey);
 document.addEventListener('keyup',   e => { keys[e.code] = false; });
 
 function move(dt) {
-  if (!controls.isLocked) return;
-  const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
+  if (!controls.isLocked && !IS_TOUCH) return;
+  const sprint = keys['ShiftLeft'] || keys['ShiftRight'] || touchSprint;
   const v = (sprint ? 8 : 3) * dt;
   const dir = new THREE.Vector3();
 
@@ -268,6 +326,8 @@ function move(dt) {
   if (keys['KeyS'] || keys['ArrowDown'])  camera.position.addScaledVector(dir, -v);
   if (keys['KeyA'] || keys['ArrowLeft'])  controls.moveRight(-v);
   if (keys['KeyD'] || keys['ArrowRight']) controls.moveRight(v);
+  if (keys['Space'])  camera.position.y += v;   // desktop fly up
+  if (touchVert)      camera.position.y += touchVert * v;
 }
 
 // ── Loading ───────────────────────────────────────────────────────────────────
@@ -301,7 +361,6 @@ const gltfLoader = new GLTFLoader();
 
 // Track world nodes for all floors so we can nudge any of them
 const floorNodes = {};  // floor_id -> { node, baseMatrix }
-let topFloorNode = null, topFloorBaseMatrix = null; // kept for legacy align tool
 
 const _glbV = Date.now();
 FLOORS.forEach(({ id, label }) => {
@@ -316,7 +375,6 @@ FLOORS.forEach(({ id, label }) => {
           const key = m[1];
           child.matrixAutoUpdate = false;  // prevent render loop from overwriting direct matrix changes
           floorNodes[key] = { node: child, baseMatrix: child.matrix.clone() };
-          if (key === 'top_floor') { topFloorNode = child; topFloorBaseMatrix = child.matrix.clone(); }
         }
       });
 
@@ -365,11 +423,6 @@ window.setView = function(mode) {
   if (cloudObject) cloudObject.visible = mode === 'cloud';
   document.getElementById('btn-mesh').classList.toggle('active',  mode === 'mesh');
   document.getElementById('btn-cloud').classList.toggle('active', mode === 'cloud');
-};
-
-window.toggleAlignPanel = function() {
-  const p = document.getElementById('align-panel');
-  p.style.display = p.style.display === 'none' ? 'block' : 'none';
 };
 
 // ── Floor indicator ───────────────────────────────────────────────────────────
@@ -465,12 +518,7 @@ canvas.addEventListener('click', e => {
   }
 });
 
-// ── Alignment tool ────────────────────────────────────────────────────────────
-const refPts = [];
-const tgtPts = [];
-const alignMarkers = [];
-let lastAlignSolve = null;
-
+// ── Center-screen flash + shared animation queue ───────────────────────────────
 const flashEl = document.getElementById('marker-flash');
 let flashTimer = null;
 
@@ -482,205 +530,270 @@ function showFlash(msg, color) {
   flashTimer = setTimeout(() => { flashEl.style.opacity = '0'; }, 1400);
 }
 
-// ~0.15 m diameter orb, partially transparent, no spike
-function makeMarker(color) {
-  const mat = new THREE.MeshBasicMaterial({
-    color, fog: false, transparent: true, opacity: 0.68,
-    depthTest: false, depthWrite: false,
+const activeAnims = [];   // consumed by the render loop (kept for future effects)
+
+// Lets other code re-sync the touch look state after we move the camera
+// programmatically. Reassigned inside the IS_TOUCH block below.
+let lookResync = () => {};
+
+// ── Notes: annotations pinned to 3-D positions ─────────────────────────────────
+// Persistence: remote API (API Gateway → Lambda → DynamoDB) with a localStorage
+// mirror used as an offline cache + fallback.
+// NOTE_TOKEN is NOT a secret — this page is public, so it's hardcoded as a bot
+// filter (deflects naive scanners hitting the raw URL). Real abuse is capped by
+// API Gateway throttling. Don't treat this endpoint as authenticated.
+const NOTES_API   = 'https://xa737b4fo1.execute-api.us-west-2.amazonaws.com/';
+const NOTES_KEY   = 'house-notes-v1';   // local cache / offline fallback
+const NOTES_TOKEN = 'e2e11ffe7969ca1101eba864ebec16566e6ad2b8f9f44f85';  // bot-filter marker (public)
+
+async function notesApi(method, body) {
+  const res = await fetch(NOTES_API, {
+    method,
+    headers: { 'content-type': 'application/json', 'x-notes-token': NOTES_TOKEN },
+    body: body ? JSON.stringify(body) : undefined,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), mat);
-  mesh.renderOrder = 9999;
-  mesh.frustumCulled = false;
-  return mesh;
+  if (!res.ok) throw new Error('notes API ' + res.status);
+  return res.status === 204 ? null : res.json();
 }
 
-// ── Laser beam animation ──────────────────────────────────────────────────────
-const activeAnims = [];
+const cacheRead  = () => { try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch { return []; } };
+const cacheWrite = (l) => localStorage.setItem(NOTES_KEY, JSON.stringify(l));
 
-function fireLaser(hitPt, laserColor, markerColor, pts, labelText) {
-  // Start the beam just past the near plane so it isn't clipped
-  const camDir = new THREE.Vector3();
-  camera.getWorldDirection(camDir);
-  const beamStart = camera.position.clone().addScaledVector(camDir, 0.08);
+let notesOnline = false;   // last sync result, shown in the panel footer
 
-  const posArr = new Float32Array([
-    beamStart.x, beamStart.y, beamStart.z,
-    beamStart.x, beamStart.y, beamStart.z,
-  ]);
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-  const lineMat = new THREE.LineBasicMaterial({
-    color: laserColor, fog: false, depthTest: false, depthWrite: false,
-  });
-  const beam = new THREE.Line(geo, lineMat);
-  beam.frustumCulled = false;
-  beam.renderOrder = 9998;
-  scene.add(beam);
+const NoteStore = {
+  async all() {
+    try {
+      const list = await notesApi('GET');
+      notesOnline = true; cacheWrite(list); updateNotesStatus();
+      return list;
+    } catch (e) {
+      notesOnline = false; updateNotesStatus();
+      console.warn('notes API GET failed — using local cache', e);
+      return cacheRead();
+    }
+  },
+  // Writes are optimistic: update the local cache immediately, then sync.
+  async add(note) {
+    const l = cacheRead(); l.push(note); cacheWrite(l);
+    try { await notesApi('POST', note); notesOnline = true; }
+    catch (e) { notesOnline = false; console.warn('note add sync failed', e); }
+    updateNotesStatus();
+  },
+  async update(id, patch) {
+    const l = cacheRead(); const n = l.find(x => x.id === id);
+    if (n) Object.assign(n, patch);
+    cacheWrite(l);
+    if (n) {
+      try { await notesApi('PUT', n); notesOnline = true; }
+      catch (e) { notesOnline = false; console.warn('note update sync failed', e); }
+    }
+    updateNotesStatus();
+  },
+  async remove(id) {
+    cacheWrite(cacheRead().filter(x => x.id !== id));
+    try { await notesApi('DELETE', { id }); notesOnline = true; }
+    catch (e) { notesOnline = false; console.warn('note delete sync failed', e); }
+    updateNotesStatus();
+  },
+};
 
-  const TRAVEL = 0.22; // seconds to reach hit point
-  let elapsed = 0;
-
-  activeAnims.push({
-    update(dt) {
-      elapsed += dt;
-      const t = Math.min(elapsed / TRAVEL, 1);
-      const cur = beamStart.clone().lerp(hitPt, t);
-      posArr[3] = cur.x; posArr[4] = cur.y; posArr[5] = cur.z;
-      geo.attributes.position.needsUpdate = true;
-
-      if (t >= 1) {
-        scene.remove(beam); geo.dispose(); lineMat.dispose();
-        placeMarker(hitPt, markerColor, pts, labelText);
-        return true; // remove from activeAnims
-      }
-      return false;
-    },
-  });
+function updateNotesStatus() {
+  const el = document.getElementById('notes-status');
+  if (!el) return;
+  el.textContent = notesOnline
+    ? '☁ Synced to cloud'
+    : '⚠ Offline — saved locally, will retry when reachable';
 }
 
-function placeMarker(pt, color, pts, labelText) {
-  const m = makeMarker(color);
-  m.position.copy(pt);
-  scene.add(m);
-  alignMarkers.push(m);
-  pts.push(pt);
-  const idx = pts.length;
-  const css  = color === 0x3fda5a ? '#3fda5a' : '#b88dff';
-  const coord = `(${pt.x.toFixed(2)}, ${pt.y.toFixed(2)}, ${pt.z.toFixed(2)})`;
-  console.log(`[align] ${labelText} #${idx} at`, pt);
-  showFlash(`${labelText} #${idx} placed`, css);
-  const li = document.createElement('div');
-  li.style.color = css;
-  li.textContent = `${labelText} ${idx}: ${coord}`;
-  document.getElementById('align-list').appendChild(li);
-  updateAlignUI();
+const notes    = [];          // in-memory mirror of the store: {id,x,y,z,text,createdAt}
+const notePins = new Map();   // id -> THREE.Group (sphere + label sprite)
+let selectedNoteId = null;
+
+function newId() {
+  return (crypto.randomUUID ? crypto.randomUUID()
+                            : 'n' + Date.now() + Math.random().toString(16).slice(2));
 }
 
-function updateAlignUI() {
-  document.getElementById('ref-count').textContent = refPts.length;
-  document.getElementById('tgt-count').textContent = tgtPts.length;
-  const n = Math.min(refPts.length, tgtPts.length);
-  document.getElementById('solve-btn').disabled = n < 2;
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g,
+    c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
-window.addRefPoint = function() {
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);     ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+// A floating text label rendered as a sprite (canvas texture)
+function makeLabelSprite(text) {
+  const pad = 16, lh = 34, font = 'bold 28px system-ui, sans-serif';
+  const c = document.createElement('canvas'), ctx = c.getContext('2d');
+  ctx.font = font;
+  const lines = (text || '(empty)').split('\n').slice(0, 3);
+  const w = Math.min(440, Math.max(60, ...lines.map(l => ctx.measureText(l).width)) + pad * 2);
+  const h = lh * lines.length + pad * 2;
+  c.width = w; c.height = h;
+  ctx.font = font;
+  ctx.fillStyle = 'rgba(15,15,35,0.85)'; roundRect(ctx, 0, 0, w, h, 12); ctx.fill();
+  ctx.strokeStyle = '#e8b86d'; ctx.lineWidth = 3; roundRect(ctx, 1.5, 1.5, w-3, h-3, 11); ctx.stroke();
+  ctx.fillStyle = '#ffe8c0'; ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, pad, pad + i * lh));
+
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, depthTest: false, transparent: true, fog: false }));
+  spr.scale.set(w / 220, h / 220, 1);   // canvas px -> ~metres
+  spr.center.set(0.5, 0);               // anchor bottom-center, above the pin
+  spr.renderOrder = 10000;
+  return spr;
+}
+
+function makeNotePin(note) {
+  const g = new THREE.Group();
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(0.08, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xe8b86d, depthTest: false, fog: false }));
+  ball.renderOrder = 9999; ball.frustumCulled = false;
+  g.add(ball);
+  const label = makeLabelSprite(note.text); label.position.set(0, 0.18, 0);
+  g.add(label);
+  g.position.set(note.x, note.y, note.z);
+  g.userData.noteId = note.id;
+  return g;
+}
+
+function refreshPin(note) {
+  const g = notePins.get(note.id);
+  if (!g) return;
+  const old = g.children.find(ch => ch.isSprite);
+  if (old) { g.remove(old); old.material.map.dispose(); old.material.dispose(); }
+  const label = makeLabelSprite(note.text); label.position.set(0, 0.18, 0);
+  g.add(label);
+}
+
+async function loadNotes() {
+  const stored = await NoteStore.all();
+  notes.length = 0; notes.push(...stored);
+  notePins.forEach(g => scene.remove(g)); notePins.clear();
+  notes.forEach(n => { const g = makeNotePin(n); scene.add(g); notePins.set(n.id, g); });
+  renderNoteList();
+}
+
+window.addNoteHere = async function() {
   const pt = raycastSurface(SCREEN_CENTER);
-  if (!pt) { showFlash('No surface hit — aim at a wall or floor', '#ff6666'); return; }
-  fireLaser(pt, 0x44ff66, 0x1a6b2a, refPts, 'REF');   // bright green beam → dark green orb
+  if (!pt) { showFlash('Aim at a surface to pin a note', '#ff6666'); return; }
+  const note = { id: newId(), x: pt.x, y: pt.y, z: pt.z,
+                 text: '', createdAt: new Date().toISOString() };
+  notes.push(note);
+  const g = makeNotePin(note); scene.add(g); notePins.set(note.id, g);
+  await NoteStore.add(note);
+  showFlash('Note pinned', '#e8b86d');
+  controls.unlock();          // free the mouse so the user can type immediately
+  openNotesPanel();
+  selectNote(note.id, { edit: true, fly: false });
 };
 
-window.addTgtPoint = function() {
-  const pt = raycastSurface(SCREEN_CENTER);
-  if (!pt) { showFlash('No surface hit — aim at a wall or floor', '#ff6666'); return; }
-  fireLaser(pt, 0xbb88ff, 0x5522aa, tgtPts, '2F');     // bright purple beam → dark purple orb
-};
-
-window.undoAlignMarker = function() {
-  // Remove last placed marker (either ref or tgt — whichever was last)
-  if (alignMarkers.length === 0) return;
-  scene.remove(alignMarkers.pop());
-  // Remove from whichever list has more points (the one that was last modified)
-  if (tgtPts.length >= refPts.length && tgtPts.length > 0) tgtPts.pop();
-  else if (refPts.length > 0) refPts.pop();
-  updateAlignUI();
-};
-
-window.clearAlignment = function() {
-  refPts.length = 0; tgtPts.length = 0;
-  alignMarkers.forEach(m => scene.remove(m)); alignMarkers.length = 0;
-  lastAlignSolve = null;
-  document.getElementById('align-result').textContent = '';
-  document.getElementById('align-residual').textContent = '';
-  document.getElementById('apply-row').style.display = 'none';
-  document.getElementById('pipeline-cmd').style.display = 'none';
-  document.getElementById('align-list').innerHTML = '';
-  updateAlignUI();
-};
-
-// 2-D Kabsch: find rotation (around Y) + XZ translation that maps tgt → ref
-function kabsch2D(a, b) {
-  const n = a.length;
-  if (n < 2) return null;
-
-  let mAx=0, mAz=0, mBx=0, mBz=0;
-  for (let i=0; i<n; i++) { mAx+=a[i].x; mAz+=a[i].z; mBx+=b[i].x; mBz+=b[i].z; }
-  mAx/=n; mAz/=n; mBx/=n; mBz/=n;
-
-  // H = sum( b_hat @ a_hat^T )
-  let h00=0, h01=0, h10=0, h11=0;
-  for (let i=0; i<n; i++) {
-    const ax=a[i].x-mAx, az=a[i].z-mAz;
-    const bx=b[i].x-mBx, bz=b[i].z-mBz;
-    h00+=bx*ax; h01+=bx*az; h10+=bz*ax; h11+=bz*az;
+function selectNote(id, { edit = false, fly = true } = {}) {
+  selectedNoteId = id;
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+  if (fly) {
+    const target = new THREE.Vector3(note.x, note.y, note.z);
+    const dir = camera.position.clone().sub(target);
+    if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
+    camera.position.copy(target).addScaledVector(dir.normalize(), 2.6);
+    camera.lookAt(target);
+    lookResync();
   }
-
-  const theta = Math.atan2(h10 - h01, h00 + h11);
-  const c = Math.cos(theta), s = Math.sin(theta);
-  const tx = mAx - (c*mBx - s*mBz);
-  const tz = mAz - (s*mBx + c*mBz);
-
-  // Residual RMS (in XZ plane)
-  let sumSq = 0;
-  for (let i=0; i<n; i++) {
-    const rx = (c*b[i].x - s*b[i].z + tx) - a[i].x;
-    const rz = (s*b[i].x + c*b[i].z + tz) - a[i].z;
-    sumSq += rx*rx + rz*rz;
+  renderNoteList();
+  if (edit) {
+    const ta = document.getElementById('note-edit-text');
+    ta.value = note.text;
+    document.getElementById('note-editor').style.display = 'block';
+    if (!controls.isLocked) ta.focus();
   }
-  const rms = Math.sqrt(sumSq / n);
-
-  return { theta, tx, tz, rms, thetaDeg: theta * 180 / Math.PI };
 }
 
-window.solveAlignment = function() {
-  const n = Math.min(refPts.length, tgtPts.length);
-  if (n < 2) return;
-
-  const sol = kabsch2D(refPts.slice(0, n), tgtPts.slice(0, n));
-  if (!sol) return;
-  lastAlignSolve = sol;
-
-  document.getElementById('align-result').textContent =
-    `Rotation: ${sol.thetaDeg.toFixed(2)}°\n` +
-    `Shift X: ${sol.tx.toFixed(3)} m  Z: ${sol.tz.toFixed(3)} m`;
-  document.getElementById('align-residual').textContent =
-    `RMS residual: ${(sol.rms * 100).toFixed(1)} cm  (${n} pairs)`;
-  document.getElementById('apply-row').style.display = 'flex';
-  document.getElementById('pipeline-cmd').style.display = 'none';
+window.saveNoteEdit = async function() {
+  const note = notes.find(n => n.id === selectedNoteId);
+  if (!note) return;
+  note.text = document.getElementById('note-edit-text').value;
+  await NoteStore.update(note.id, { text: note.text });
+  refreshPin(note);
+  renderNoteList();
+  showFlash('Note saved', '#5fda8a');
 };
 
-window.applyAlignment = function() {
-  if (!lastAlignSolve || !topFloorNode) return;
-  const { theta, tx, tz } = lastAlignSolve;
-  const c = Math.cos(theta), s = Math.sin(theta);
-
-  // M_corr (Y-up): rotation around Y + XZ translation, applied before base matrix
-  const corr = new THREE.Matrix4().set(
-     c,  0, -s, tx,
-     0,  1,  0,  0,
-     s,  0,  c, tz,
-     0,  0,  0,  1
-  );
-  topFloorNode.matrix.copy(topFloorBaseMatrix).premultiply(corr);
-  topFloorNode.matrixWorldNeedsUpdate = true;
+window.deleteNote = async function(id) {
+  id = id || selectedNoteId;
+  if (!id) return;
+  const g = notePins.get(id);
+  if (g) { scene.remove(g); notePins.delete(id); }
+  const i = notes.findIndex(n => n.id === id);
+  if (i >= 0) notes.splice(i, 1);
+  await NoteStore.remove(id);
+  if (selectedNoteId === id) {
+    selectedNoteId = null;
+    document.getElementById('note-editor').style.display = 'none';
+  }
+  renderNoteList();
 };
 
-window.showPipelineCmd = function() {
-  if (!lastAlignSolve) return;
-  const { thetaDeg, tx, tz } = lastAlignSolve;
-  // Y-up tx,tz → Z-up: tx stays as X, tz becomes -Y (Z-up Y = -Y-up Z)
-  const cmd = `uv run pipeline/07d_apply_floor_align.py ` +
-    `--theta ${thetaDeg.toFixed(4)} --tx ${tx.toFixed(4)} --ty ${(-tz).toFixed(4)}`;
-  const el = document.getElementById('pipeline-cmd');
-  el.textContent = cmd;
-  el.style.display = 'block';
+function renderNoteList() {
+  const ul = document.getElementById('note-list');
+  ul.innerHTML = '';
+  if (!notes.length) {
+    ul.innerHTML = '<div style="color:#666;font-size:11px">No notes yet. ' +
+                   'Aim at a spot and press B (or “+ Pin note”).</div>';
+    return;
+  }
+  notes.forEach((n, i) => {
+    const row = document.createElement('div');
+    row.className = 'note-item' + (n.id === selectedNoteId ? ' sel' : '');
+    const label = (n.text || '(empty)').split('\n')[0].slice(0, 40);
+    const go = document.createElement('span');
+    go.className = 'note-go';
+    go.innerHTML = `📍 ${i + 1}. ${escapeHtml(label)}`;
+    go.onclick = () => selectNote(n.id, { edit: true, fly: true });
+    const del = document.createElement('button');
+    del.className = 'note-del'; del.textContent = '✕'; del.title = 'Delete';
+    del.onclick = (e) => { e.stopPropagation(); deleteNote(n.id); };
+    row.append(go, del);
+    ul.appendChild(row);
+  });
+}
+
+function openNotesPanel() {
+  document.getElementById('notes-panel').style.display = 'block';
+  document.getElementById('btn-notes').classList.add('active');
+  document.getElementById('nudge-panel').style.display = 'none';
+  document.getElementById('btn-nudge').classList.remove('active');
+  updateNotesStatus();
+}
+
+window.toggleNotesPanel = function() {
+  const p = document.getElementById('notes-panel');
+  if (p.style.display === 'block') {
+    p.style.display = 'none';
+    document.getElementById('btn-notes').classList.remove('active');
+  } else {
+    openNotesPanel();
+  }
 };
+
+loadNotes();
 
 // ── Nudge panel ───────────────────────────────────────────────────────────────
 window.toggleNudgePanel = function() {
   const p = document.getElementById('nudge-panel');
   const open = p.style.display !== 'none';
   p.style.display = open ? 'none' : 'block';
-  document.getElementById('align-panel').style.display = 'none';
+  document.getElementById('notes-panel').style.display = 'none';
+  document.getElementById('btn-notes').classList.remove('active');
   document.getElementById('btn-nudge').classList.toggle('active', !open);
 };
 
@@ -694,43 +807,62 @@ window.toggleMirror = function(axis) {
   applyNudge();
 };
 
+// Build the Three.js Y-up correction matrix from the current slider values.
+// Full 3-axis Euler rotation (X=pitch, Y=yaw, Z=roll) about the object's own
+// center, plus XYZ translation. Works for every nudge target (floors + stairs).
+// The exact same matrix is baked by the pipeline via the --matrix flag.
+function buildCorrYup(fn) {
+  const rx = parseFloat(document.getElementById('ns-rotx').value)  * Math.PI / 180;
+  const ry = parseFloat(document.getElementById('ns-theta').value) * Math.PI / 180;
+  const rz = parseFloat(document.getElementById('ns-rotz').value)  * Math.PI / 180;
+  const tx = parseFloat(document.getElementById('ns-tx').value);
+  const ty = parseFloat(document.getElementById('ns-ty').value);
+  const tz = parseFloat(document.getElementById('ns-tz').value);
+
+  // Pure rotation from Euler angles
+  const corr = new THREE.Matrix4().makeRotationFromEuler(
+    new THREE.Euler(rx, ry, rz, 'XYZ'));
+
+  // Rotate in-place about the object's own origin p:
+  //   world = R(x - p) + p + t   =>   translation column = t + p - R·p
+  const p  = new THREE.Vector3().setFromMatrixPosition(fn.baseMatrix);
+  const Rp = p.clone().applyMatrix4(corr);             // corr has no translation yet
+  corr.setPosition(new THREE.Vector3(tx, ty, tz).add(p).sub(Rp));
+  return corr;
+}
+
+window.bumpRot = function(sliderId, deg) {
+  const el = document.getElementById(sliderId);
+  let v = parseFloat(el.value) + deg;
+  // wrap into [-180, 180]
+  while (v > 180)  v -= 360;
+  while (v < -180) v += 360;
+  el.value = v;
+  applyNudge();
+};
+
 window.applyNudge = function() {
   const id  = document.getElementById('nudge-floor-sel').value;
   const fn  = floorNodes[id];
   if (!fn) return;
 
-  const theta = parseFloat(document.getElementById('ns-theta').value) * Math.PI / 180;
-  const tx    = parseFloat(document.getElementById('ns-tx').value);
-  const tz    = parseFloat(document.getElementById('ns-tz').value);
-  const ty    = parseFloat(document.getElementById('ns-ty').value);
+  const rx = parseFloat(document.getElementById('ns-rotx').value);
+  const ry = parseFloat(document.getElementById('ns-theta').value);
+  const rz = parseFloat(document.getElementById('ns-rotz').value);
+  const tx = parseFloat(document.getElementById('ns-tx').value);
+  const tz = parseFloat(document.getElementById('ns-tz').value);
+  const ty = parseFloat(document.getElementById('ns-ty').value);
 
-  document.getElementById('nv-theta').textContent =
-    (theta * 180 / Math.PI).toFixed(1) + ' deg';
+  document.getElementById('nv-rotx').textContent  = rx.toFixed(1) + ' deg';
+  document.getElementById('nv-theta').textContent = ry.toFixed(1) + ' deg';
+  document.getElementById('nv-rotz').textContent  = rz.toFixed(1) + ' deg';
   document.getElementById('nv-tx').textContent = tx.toFixed(3) + ' m';
   document.getElementById('nv-tz').textContent = tz.toFixed(3) + ' m';
   document.getElementById('nv-ty').textContent = ty.toFixed(3) + ' m';
 
-  const c = Math.cos(theta), s = Math.sin(theta);
-  const isStair = (id === 'main_to_top' || id === 'main_to_basement');
-  let corr;
-  if (isStair) {
-    // Rotate around staircase's own center so theta spins it in-place
-    const p = new THREE.Vector3().setFromMatrixPosition(fn.baseMatrix);
-    corr = new THREE.Matrix4().set(
-      c, 0, -s, p.x*(1-c) + s*p.z + tx,
-      0, 1,  0, ty,
-      s, 0,  c, -s*p.x + p.z*(1-c) + tz,
-      0, 0,  0, 1
-    );
-  } else {
-    corr = new THREE.Matrix4().set(
-      c, 0, -s, tx,
-      0, 1,  0, ty,
-      s, 0,  c, tz,
-      0, 0,  0,  1
-    );
-  }
+  const corr = buildCorrYup(fn);
 
+  const isStair = (id === 'main_to_top' || id === 'main_to_basement');
   // Apply optional mirror (post-multiply = flip in local space before world transform)
   const mirror = isStair ? (_stairMirror[id] || null) : null;
   if (mirror) {
@@ -751,12 +883,12 @@ window.resetNudge = function() {
   _stairMirror[id] = null;
   document.getElementById('mirror-x-btn').style.background = '';
   document.getElementById('mirror-z-btn').style.background = '';
-  ['ns-theta','ns-tx','ns-tz','ns-ty'].forEach(id => {
+  ['ns-rotx','ns-theta','ns-rotz','ns-tx','ns-tz','ns-ty'].forEach(id => {
     document.getElementById(id).value = 0;
   });
-  ['nv-theta','nv-tx','nv-tz','nv-ty'].forEach(id => {
+  ['nv-rotx','nv-theta','nv-rotz','nv-tx','nv-tz','nv-ty'].forEach(id => {
     const el = document.getElementById(id);
-    el.textContent = id === 'nv-theta' ? '0.0 deg' : '0.000 m';
+    el.textContent = id.startsWith('nv-rot') || id === 'nv-theta' ? '0.0 deg' : '0.000 m';
   });
   document.getElementById('nudge-cmd').style.display = 'none';
   const fn = floorNodes[id];
@@ -764,38 +896,29 @@ window.resetNudge = function() {
 };
 
 window.showNudgeCmd = function() {
-  const id    = document.getElementById('nudge-floor-sel').value;
-  const theta = parseFloat(document.getElementById('ns-theta').value);
-  const tx    = parseFloat(document.getElementById('ns-tx').value);
-  const tz    = parseFloat(document.getElementById('ns-tz').value);
-  const ty    = parseFloat(document.getElementById('ns-ty').value);
+  const id  = document.getElementById('nudge-floor-sel').value;
+  const fn  = floorNodes[id];
+  if (!fn) return;
+
+  // Emit the raw Y-up correction matrix; the pipeline reproduces it exactly,
+  // so all 3 rotation axes + the in-place pivot survive baking.
+  // THREE.Matrix4.elements is column-major; transpose to row-major for --matrix.
+  const corr = buildCorrYup(fn);
+  const e = corr.elements;
+  const rowMajor = [
+    e[0], e[4], e[8],  e[12],
+    e[1], e[5], e[9],  e[13],
+    e[2], e[6], e[10], e[14],
+    e[3], e[7], e[11], e[15],
+  ].map(v => v.toFixed(6)).join(' ');
 
   let cmd;
   if (id === 'main_to_top' || id === 'main_to_basement') {
-    // Staircases rotate around own center; back-compute world-space tx/tz for 07f
-    const fn2 = floorNodes[id];
-    const p = fn2 ? new THREE.Vector3().setFromMatrixPosition(fn2.baseMatrix) : new THREE.Vector3();
-    const c = Math.cos(theta * Math.PI / 180), s = Math.sin(theta * Math.PI / 180);
-    const tx_eff = p.x*(1-c) + s*p.z + tx;
-    const tz_eff = -s*p.x + p.z*(1-c) + tz;
     const mirrorFlag = _stairMirror[id] === 'x' ? ' --mirror-x'
                      : _stairMirror[id] === 'z' ? ' --mirror-z' : '';
-    cmd = `uv run pipeline/07f_nudge_stair.py` +
-      ` --stair ${id}` +
-      ` --theta ${theta.toFixed(4)}` +
-      ` --tx ${tx_eff.toFixed(4)}` +
-      ` --ty ${ty.toFixed(4)}` +
-      ` --tz ${tz_eff.toFixed(4)}` +
-      mirrorFlag;
+    cmd = `uv run pipeline/07f_nudge_stair.py --stair ${id} --matrix "${rowMajor}"${mirrorFlag}`;
   } else {
-    // Floors: convert Three.js Y-up -> Z-up pipeline coords
-    // Viewer applies Ry(-theta); pipeline export produces Ry(theta), so negate
-    cmd = `uv run pipeline/07d_apply_floor_align.py` +
-      ` --floor ${id}` +
-      ` --theta ${(-theta).toFixed(4)}` +
-      ` --tx ${tx.toFixed(4)}` +
-      ` --ty ${(-tz).toFixed(4)}` +
-      ` --tz ${ty.toFixed(4)}`;
+    cmd = `uv run pipeline/07d_apply_floor_align.py --floor ${id} --matrix "${rowMajor}"`;
   }
   const el = document.getElementById('nudge-cmd');
   el.textContent = cmd;
@@ -836,14 +959,69 @@ function updateClipPlanes() {
 
 // ── Keyboard handler ──────────────────────────────────────────────────────────
 function onKey(e) {
+  // Don't hijack keys while typing in a note / form field
+  const tag = e.target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   keys[e.code] = true;
-  if (e.code === 'KeyM')         window.toggleMeasure();
-  if (e.code === 'KeyF')         window.toggleAlignPanel();
-  if (e.code === 'KeyN')         window.toggleNudgePanel();
-  if (e.code === 'KeyC')         window.toggleClip();
-  if (e.code === 'KeyG')         window.addRefPoint();
-  if (e.code === 'KeyP')         window.addTgtPoint();
-  if (e.code === 'Backspace')    window.undoAlignMarker();
+  if (e.code === 'KeyM')  window.toggleMeasure();
+  if (e.code === 'KeyN')  window.toggleNudgePanel();
+  if (e.code === 'KeyC')  window.toggleClip();
+  if (e.code === 'KeyB')  window.addNoteHere();
+}
+
+// ── Touch look + on-screen fly buttons ─────────────────────────────────────────
+if (IS_TOUCH) {
+  const lookEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  let lookReady = false, lookId = null, lastX = 0, lastY = 0;
+  const LOOK_SPEED = 0.0042;
+
+  // After the camera is moved programmatically (e.g. fly-to-note), re-read its
+  // orientation on the next drag instead of snapping back.
+  lookResync = () => { lookReady = false; };
+
+  function startLook(t) {
+    lookId = t.identifier; lastX = t.clientX; lastY = t.clientY;
+    if (!lookReady) { lookEuler.setFromQuaternion(camera.quaternion, 'YXZ'); lookReady = true; }
+  }
+  canvas.addEventListener('touchstart', e => {
+    if (lookId === null) startLook(e.changedTouches[0]);
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', e => {
+    if (lookId === null) return;
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      lookEuler.y -= (t.clientX - lastX) * LOOK_SPEED;
+      lookEuler.x -= (t.clientY - lastY) * LOOK_SPEED;
+      const lim = Math.PI / 2 - 0.02;
+      lookEuler.x = Math.max(-lim, Math.min(lim, lookEuler.x));
+      camera.quaternion.setFromEuler(lookEuler);
+      lastX = t.clientX; lastY = t.clientY;
+    }
+  }, { passive: true });
+
+  const endLook = e => {
+    for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null;
+  };
+  canvas.addEventListener('touchend', endLook);
+  canvas.addEventListener('touchcancel', endLook);
+
+  document.querySelectorAll('#touch-controls .touch-btn').forEach(btn => {
+    const down = e => {
+      e.preventDefault(); e.stopPropagation();
+      if (btn.dataset.move)      { keys[btn.dataset.move] = true; btn.classList.add('on'); }
+      else if (btn.dataset.vert) { touchVert = btn.dataset.vert === 'up' ? 1 : -1; btn.classList.add('on'); }
+      else                       { touchSprint = !touchSprint; btn.classList.toggle('on', touchSprint); }
+    };
+    const up = e => {
+      e.preventDefault(); e.stopPropagation();
+      if (btn.dataset.move)      { keys[btn.dataset.move] = false; btn.classList.remove('on'); }
+      else if (btn.dataset.vert) { touchVert = 0; btn.classList.remove('on'); }
+    };
+    btn.addEventListener('touchstart', down, { passive: false });
+    btn.addEventListener('touchend',   up,   { passive: false });
+    btn.addEventListener('touchcancel', up,  { passive: false });
+  });
 }
 
 // ── Resize ────────────────────────────────────────────────────────────────────
