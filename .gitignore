@@ -1,5 +1,6 @@
-# Generated pipeline outputs
-output/
+# Generated pipeline outputs (except viewer assets served via Pages)
+output/*
+!output/viewer
 
 # Raw scan data (too large for git; store separately)
 docs/
