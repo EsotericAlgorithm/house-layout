@@ -118,7 +118,7 @@
     background:rgba(20,20,45,0.55); border:1px solid #5a5a78; color:#cfe3f0;
     font-size:22px; line-height:1; display:flex; align-items:center; justify-content:center;
     user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
-    touch-action:none; z-index:60; backdrop-filter:blur(2px);
+    touch-action:none; z-index:60; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
   }
   .touch-btn.on { background:rgba(70,110,165,0.9); border-color:#7ec8e3; }
   /* movement pad — bottom-left */
@@ -278,8 +278,13 @@ import { PointerLockControls } from 'three/addons/controls/PointerLockControls.j
 
 // ── Renderer ──────────────────────────────────────────────────────────────────
 const canvas   = document.getElementById('canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// iOS Safari enforces a hard per-tab memory budget and jettisons the tab when it
+// is exceeded. On touch devices we trim antialiasing + pixel ratio here, and also
+// cap texture sizes and lazy-load the point cloud below.
+const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (IS_TOUCH) document.body.classList.add('touch');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TOUCH, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
@@ -304,10 +309,8 @@ canvas.addEventListener('click', () => { if (!measureMode && !IS_TOUCH) controls
 controls.addEventListener('lock',   () => { crosshair.style.display = 'block'; });
 controls.addEventListener('unlock', () => { crosshair.style.display = 'none';  });
 
-// Touch: PointerLock/WASD don't work on a touchscreen, so we provide on-screen
-// fly controls + drag-to-look. Desktop is unaffected.
-const IS_TOUCH = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-if (IS_TOUCH) document.body.classList.add('touch');
+// Touch fly state (IS_TOUCH is defined up by the renderer). PointerLock/WASD
+// don't work on a touchscreen, so we provide on-screen controls + drag-to-look.
 let touchSprint = false;
 let touchVert   = 0;   // -1 down, +1 up
 
@@ -333,7 +336,7 @@ function move(dt) {
 // ── Loading ───────────────────────────────────────────────────────────────────
 const bar    = document.getElementById('progress-bar');
 const status = document.getElementById('load-status');
-const TOTAL  = 5;
+const TOTAL  = 6;   // GLB floors; the point cloud now loads lazily (see loadCloud)
 let   done   = 0;
 
 function tick(name) {
@@ -359,6 +362,33 @@ const FLOORS = [
 const meshGroups = [];
 const gltfLoader = new GLTFLoader();
 
+// iOS memory saver: the GLB texture atlases are the dominant cost (a single
+// 8192² atlas decodes to ~256 MB). On touch, downscale any oversized texture to
+// a hard cap before it's uploaded to the GPU, and free the original bitmap.
+function capTextures(root, maxSize) {
+  const SLOTS = ['map','emissiveMap','normalMap','roughnessMap','metalnessMap','aoMap','bumpMap','specularMap'];
+  const seen = new Set();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    mats.forEach(m => SLOTS.forEach(slot => {
+      const t = m && m[slot];
+      if (!t || !t.image || seen.has(t)) return;
+      seen.add(t);
+      const img = t.image, big = Math.max(img.width || 0, img.height || 0);
+      if (big <= maxSize) return;
+      const s = maxSize / big;
+      const w = Math.max(1, Math.round(img.width * s));
+      const h = Math.max(1, Math.round(img.height * s));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      t.image = c;
+      t.needsUpdate = true;
+      if (img.close) img.close();   // release the decoded ImageBitmap immediately
+    }));
+  });
+}
+
 // Track world nodes for all floors so we can nudge any of them
 const floorNodes = {};  // floor_id -> { node, baseMatrix }
 
@@ -378,6 +408,7 @@ FLOORS.forEach(({ id, label }) => {
         }
       });
 
+      if (IS_TOUCH) capTextures(gltf.scene, 2048);
       scene.add(gltf.scene);
       meshGroups.push(gltf.scene);
       document.getElementById('btn-mesh').disabled = false;
@@ -391,33 +422,48 @@ FLOORS.forEach(({ id, label }) => {
   );
 });
 
-// ── Point cloud ───────────────────────────────────────────────────────────────
-let cloudObject = null;
+// ── Point cloud (lazy — only fetched when the user asks for it) ────────────────
+// The 17 MB PLY plus its in-memory Float32 buffers are a big chunk of the memory
+// budget, and the view is hidden by default. Loading it on demand keeps the
+// default (textured) view light enough for iOS.
+let cloudObject = null, cloudLoading = false;
 const ZUP_TO_YUP = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
 
-new PLYLoader().load(`../output/viewer/merged.ply?v=${_glbV}`, geo => {
-  geo.applyMatrix4(ZUP_TO_YUP);
-  geo.computeBoundingBox();
-  if (!geo.attributes.color) {
-    const n = geo.attributes.position.count, pos = geo.attributes.position.array;
-    const col = new Float32Array(n * 3);
-    const { min, max } = geo.boundingBox, yr = max.y - min.y;
-    for (let i = 0; i < n; i++) {
-      const t = (pos[i*3+1] - min.y) / yr;
-      col[i*3]=0.5+t*0.5; col[i*3+1]=0.6-t*0.2; col[i*3+2]=0.9-t*0.4;
+function loadCloud(onReady) {
+  if (cloudObject)  { onReady && onReady(); return; }
+  if (cloudLoading) return;
+  cloudLoading = true;
+  new PLYLoader().load(`../output/viewer/merged.ply?v=${_glbV}`, geo => {
+    geo.applyMatrix4(ZUP_TO_YUP);
+    geo.computeBoundingBox();
+    if (!geo.attributes.color) {
+      const n = geo.attributes.position.count, pos = geo.attributes.position.array;
+      const col = new Float32Array(n * 3);
+      const { min, max } = geo.boundingBox, yr = max.y - min.y;
+      for (let i = 0; i < n; i++) {
+        const t = (pos[i*3+1] - min.y) / yr;
+        col[i*3]=0.5+t*0.5; col[i*3+1]=0.6-t*0.2; col[i*3+2]=0.9-t*0.4;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  }
-  cloudObject = new THREE.Points(geo,
-    new THREE.PointsMaterial({ size:0.025, vertexColors:true, sizeAttenuation:true }));
-  cloudObject.visible = false;
-  scene.add(cloudObject);
-  tick('point cloud');
-}, undefined, err => { console.warn('PLY', err); tick('point cloud (failed)'); });
+    cloudObject = new THREE.Points(geo,
+      new THREE.PointsMaterial({ size:0.025, vertexColors:true, sizeAttenuation:true }));
+    cloudObject.visible = false;
+    scene.add(cloudObject);
+    cloudLoading = false;
+    onReady && onReady();
+  }, undefined, err => { console.warn('PLY', err); cloudLoading = false; });
+}
 
 // ── View toggle ───────────────────────────────────────────────────────────────
 let currentView = 'mesh';
 window.setView = function(mode) {
+  if (mode === 'cloud' && !cloudObject) {
+    const btn = document.getElementById('btn-cloud');
+    btn.textContent = 'Loading…'; btn.disabled = true;
+    loadCloud(() => { btn.textContent = 'Point Cloud'; btn.disabled = false; setView('cloud'); });
+    return;   // keep the current (mesh) view until the cloud finishes loading
+  }
   currentView = mode;
   meshGroups.forEach(g => { g.visible = mode === 'mesh'; });
   if (cloudObject) cloudObject.visible = mode === 'cloud';
