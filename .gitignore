@@ -1,0 +1,17 @@
+# Generated pipeline outputs
+output/
+
+# Raw scan data (too large for git; store separately)
+docs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
